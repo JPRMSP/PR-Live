@@ -1,8 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from math import atan2, degrees, sqrt, pi
+from math import pi
 
 st.set_page_config(
     page_title="PR-Live Pattern Recognition Lab",
@@ -10,135 +9,213 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 PR-Live: Real-Time Pattern Recognition Lab")
-st.caption("Dataset-Free • Model-Free • Interactive Pattern Recognition System")
+st.title("🧠 PR-Live: Pattern Recognition Digital Lab")
+st.caption("Dataset-Free • Model-Free • Real-Time Pattern Recognition")
 
-st.markdown("""
-Draw a pattern using the coordinate input below. The system performs
-feature extraction, distance-based classification, fuzzy classification,
-structural recognition, and unsupervised C-means clustering.
-""")
+st.write(
+    "Generate a geometric pattern and analyze it using feature extraction, "
+    "minimum-distance classification, fuzzy classification, structural "
+    "recognition, C-means clustering and genetic feature selection."
+)
 
-# ---------------------------------------------------------
-# Pattern input
-# ---------------------------------------------------------
-st.sidebar.header("Pattern Input")
+st.sidebar.header("Pattern Generator")
 
 pattern = st.sidebar.selectbox(
-    "Choose a pattern to generate",
+    "Select Pattern",
     ["Triangle", "Rectangle", "Circle", "Zigzag", "Star", "Line"]
 )
 
-points_count = st.sidebar.slider("Number of points", 10, 80, 40)
+points_count = st.sidebar.slider(
+    "Number of points",
+    10,
+    100,
+    50
+)
+
+
+def interpolate(points, n):
+    distance = np.sqrt(
+        np.sum(np.diff(points, axis=0) ** 2, axis=1)
+    )
+
+    cumulative = np.insert(
+        np.cumsum(distance),
+        0,
+        0
+    )
+
+    target = np.linspace(
+        0,
+        cumulative[-1],
+        n
+    )
+
+    x = np.interp(
+        target,
+        cumulative,
+        points[:, 0]
+    )
+
+    y = np.interp(
+        target,
+        cumulative,
+        points[:, 1]
+    )
+
+    return np.column_stack((x, y))
+
 
 def generate_pattern(name, n):
+
     if name == "Triangle":
-        base = np.array([[0, 0], [1, 0], [0.5, 1], [0, 0]])
+        base = np.array([
+            [0, 0],
+            [1, 0],
+            [0.5, 1],
+            [0, 0]
+        ])
         return interpolate(base, n)
 
     if name == "Rectangle":
         base = np.array([
-            [0, 0], [1, 0], [1, 0.7],
-            [0, 0.7], [0, 0]
+            [0, 0],
+            [1, 0],
+            [1, 0.7],
+            [0, 0.7],
+            [0, 0]
         ])
         return interpolate(base, n)
 
     if name == "Circle":
-        t = np.linspace(0, 2*pi, n)
-        return np.column_stack((np.cos(t), np.sin(t)))
+        t = np.linspace(0, 2 * pi, n)
+        return np.column_stack((
+            np.cos(t),
+            np.sin(t)
+        ))
 
     if name == "Zigzag":
         x = np.linspace(0, 1, n)
-        y = np.where(np.arange(n) % 2 == 0, 0, 1)
+        y = np.where(
+            np.arange(n) % 2 == 0,
+            0,
+            1
+        )
         return np.column_stack((x, y))
 
     if name == "Star":
-        t = np.linspace(0, 2*pi, n)
-        r = np.where(np.arange(n) % 2 == 0, 1, 0.4)
-        return np.column_stack((r*np.cos(t), r*np.sin(t)))
+        t = np.linspace(0, 2 * pi, n)
+        radius = np.where(
+            np.arange(n) % 2 == 0,
+            1,
+            0.4
+        )
+        return np.column_stack((
+            radius * np.cos(t),
+            radius * np.sin(t)
+        ))
 
     x = np.linspace(0, 1, n)
-    return np.column_stack((x, np.zeros(n)))
 
-def interpolate(points, n):
-    d = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
-    cumulative = np.insert(np.cumsum(d), 0, 0)
-    target = np.linspace(0, cumulative[-1], n)
-    x = np.interp(target, cumulative, points[:, 0])
-    y = np.interp(target, cumulative, points[:, 1])
-    return np.column_stack((x, y))
+    return np.column_stack((
+        x,
+        np.zeros(n)
+    ))
 
-points = generate_pattern(pattern, points_count)
 
-# ---------------------------------------------------------
-# Plot pattern
-# ---------------------------------------------------------
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=points[:, 0],
-    y=points[:, 1],
-    mode="lines+markers",
-    line=dict(width=4),
-    marker=dict(size=5)
-))
-
-fig.update_layout(
-    title="Real-Time Pattern",
-    xaxis=dict(range=[-1.3, 1.3], zeroline=False),
-    yaxis=dict(range=[-1.3, 1.3], zeroline=False),
-    height=500,
-    showlegend=False
+points = generate_pattern(
+    pattern,
+    points_count
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.subheader("📐 Generated Pattern")
 
-# ---------------------------------------------------------
-# Feature extraction
-# ---------------------------------------------------------
+chart_data = pd.DataFrame(
+    points,
+    columns=["X", "Y"]
+)
+
+st.line_chart(
+    chart_data,
+    x="X",
+    y="Y"
+)
+
+st.subheader("🔍 Feature Extraction")
+
+
 def extract_features(p):
+
     dx = np.diff(p[:, 0])
     dy = np.diff(p[:, 1])
 
-    length = np.sum(np.sqrt(dx**2 + dy**2))
+    segment_length = np.sqrt(
+        dx ** 2 + dy ** 2
+    )
 
-    xmin, xmax = np.min(p[:, 0]), np.max(p[:, 0])
-    ymin, ymax = np.min(p[:, 1]), np.max(p[:, 1])
+    path_length = np.sum(
+        segment_length
+    )
 
-    width = xmax - xmin
-    height = ymax - ymin
+    width = (
+        np.max(p[:, 0])
+        - np.min(p[:, 0])
+    )
 
-    area = width * height
-    aspect = width / (height + 1e-8)
+    height = (
+        np.max(p[:, 1])
+        - np.min(p[:, 1])
+    )
 
-    angles = np.arctan2(dy, dx)
-    angle_change = np.diff(np.unwrap(angles))
+    bounding_area = width * height
 
-    curvature = np.mean(np.abs(angle_change))
+    aspect_ratio = (
+        width / (height + 1e-8)
+    )
 
-    start_end = np.linalg.norm(p[0] - p[-1])
-    closure = 1 - start_end / (length + 1e-8)
+    angles = np.arctan2(
+        dy,
+        dx
+    )
 
-    centroid_x = np.mean(p[:, 0])
-    centroid_y = np.mean(p[:, 1])
+    angle_change = np.diff(
+        np.unwrap(angles)
+    )
+
+    curvature = np.mean(
+        np.abs(angle_change)
+    )
+
+    start_end_distance = np.linalg.norm(
+        p[0] - p[-1]
+    )
+
+    closure = (
+        1
+        - start_end_distance
+        / (path_length + 1e-8)
+    )
+
+    centroid_x = np.mean(
+        p[:, 0]
+    )
+
+    centroid_y = np.mean(
+        p[:, 1]
+    )
 
     return np.array([
-        length,
+        path_length,
         width,
         height,
-        aspect,
-        area,
+        aspect_ratio,
+        bounding_area,
         curvature,
         closure,
         centroid_x,
         centroid_y
     ])
 
-features = extract_features(points)
 
-# ---------------------------------------------------------
-# Feature display
-# ---------------------------------------------------------
 feature_names = [
     "Path Length",
     "Width",
@@ -151,18 +228,21 @@ feature_names = [
     "Centroid Y"
 ]
 
-feature_df = pd.DataFrame({
+features = extract_features(points)
+
+feature_table = pd.DataFrame({
     "Feature": feature_names,
     "Value": np.round(features, 4)
 })
 
-st.subheader("🔍 Extracted Pattern Features")
-st.dataframe(feature_df, use_container_width=True, hide_index=True)
+st.dataframe(
+    feature_table,
+    use_container_width=True,
+    hide_index=True
+)
 
-# ---------------------------------------------------------
-# Prototype feature vectors
-# Generated algorithmically, not from datasets
-# ---------------------------------------------------------
+st.subheader("🎯 Minimum Distance Classifier")
+
 prototype_names = [
     "Triangle",
     "Rectangle",
@@ -172,64 +252,156 @@ prototype_names = [
     "Line"
 ]
 
-prototype_vectors = []
+prototype_features = []
 
 for name in prototype_names:
-    proto = generate_pattern(name, 60)
-    prototype_vectors.append(extract_features(proto))
 
-prototype_vectors = np.array(prototype_vectors)
+    prototype = generate_pattern(
+        name,
+        60
+    )
 
-# ---------------------------------------------------------
-# Normalized distance classifier
-# ---------------------------------------------------------
-def normalize_matrix(x):
-    minimum = np.min(x, axis=0)
-    maximum = np.max(x, axis=0)
-    return (x - minimum) / (maximum - minimum + 1e-8)
+    prototype_features.append(
+        extract_features(prototype)
+    )
 
-all_features = np.vstack([prototype_vectors, features])
-normalized = normalize_matrix(all_features)
+prototype_features = np.array(
+    prototype_features
+)
 
-proto_norm = normalized[:-1]
-input_norm = normalized[-1]
+
+def normalize(data):
+
+    minimum = np.min(
+        data,
+        axis=0
+    )
+
+    maximum = np.max(
+        data,
+        axis=0
+    )
+
+    return (
+        data - minimum
+    ) / (
+        maximum - minimum + 1e-8
+    )
+
+
+combined = np.vstack([
+    prototype_features,
+    features
+])
+
+normalized = normalize(
+    combined
+)
+
+prototype_normalized = normalized[:-1]
+input_normalized = normalized[-1]
 
 distances = np.linalg.norm(
-    proto_norm - input_norm,
+    prototype_normalized
+    - input_normalized,
     axis=1
 )
 
-best_index = np.argmin(distances)
-distance_class = prototype_names[best_index]
+best_index = np.argmin(
+    distances
+)
 
-# ---------------------------------------------------------
-# Fuzzy membership classifier
-# ---------------------------------------------------------
-similarity = 1 / (1 + distances)
-fuzzy_membership = similarity / np.sum(similarity)
+distance_class = prototype_names[
+    best_index
+]
 
-fuzzy_index = np.argmax(fuzzy_membership)
-fuzzy_class = prototype_names[fuzzy_index]
+distance_table = pd.DataFrame({
+    "Pattern": prototype_names,
+    "Distance": np.round(
+        distances,
+        5
+    )
+})
 
-# ---------------------------------------------------------
-# Structural pattern recognition
-# ---------------------------------------------------------
+st.dataframe(
+    distance_table.sort_values(
+        "Distance"
+    ),
+    use_container_width=True,
+    hide_index=True
+)
+
+st.success(
+    f"Minimum-distance result: {distance_class}"
+)
+
+st.subheader("🌫️ Fuzzy Pattern Classification")
+
+similarity = (
+    1 / (1 + distances)
+)
+
+membership = (
+    similarity
+    / np.sum(similarity)
+)
+
+fuzzy_table = pd.DataFrame({
+    "Pattern": prototype_names,
+    "Membership": np.round(
+        membership,
+        4
+    )
+})
+
+st.dataframe(
+    fuzzy_table,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.bar_chart(
+    fuzzy_table.set_index(
+        "Pattern"
+    )
+)
+
+fuzzy_class = prototype_names[
+    np.argmax(membership)
+]
+
+st.info(
+    f"Highest fuzzy membership: {fuzzy_class}"
+)
+
+st.subheader("🧩 Structural Pattern Recognition")
+
+
 def structural_recognition(p):
+
     f = extract_features(p)
 
-    length = f[0]
     aspect = f[3]
     curvature = f[5]
     closure = f[6]
 
-    if closure > 0.75 and 0.75 < aspect < 1.25:
-        if curvature < 0.45:
-            return "Circle / Closed Loop"
+    if (
+        closure > 0.75
+        and 0.75 < aspect < 1.25
+        and curvature < 0.45
+    ):
+        return "Circle / Closed Loop"
 
-    if closure > 0.65 and 0.6 < aspect < 1.8:
+    if (
+        closure > 0.65
+        and 0.6 < aspect < 1.8
+    ):
         return "Closed Polygon"
 
-    if curvature > 0.35 and closure < 0.5:
+    if (
+        curvature > 0.35
+        and closure < 0.5
+    ):
         return "Zigzag / Irregular Structure"
 
     if curvature < 0.12:
@@ -237,63 +409,141 @@ def structural_recognition(p):
 
     return "General Geometric Pattern"
 
-structural_class = structural_recognition(points)
 
-# ---------------------------------------------------------
-# C-Means clustering
-# ---------------------------------------------------------
+structural_result = structural_recognition(
+    points
+)
+
+st.success(
+    f"Structural recognition: {structural_result}"
+)
+
+st.subheader("🌐 C-Means Unsupervised Classification")
+
+
 def cmeans(data, clusters=3, iterations=20):
-    data = np.asarray(data, dtype=float)
 
     centers = data[
-        np.linspace(0, len(data) - 1, clusters).astype(int)
+        np.linspace(
+            0,
+            len(data) - 1,
+            clusters
+        ).astype(int)
     ].copy()
 
-    membership = np.zeros((len(data), clusters))
+    membership = np.zeros(
+        (len(data), clusters)
+    )
 
     for _ in range(iterations):
+
         for i in range(len(data)):
-            d = np.linalg.norm(data[i] - centers, axis=1) + 1e-8
-            membership[i] = 1 / d
-            membership[i] /= np.sum(membership[i])
+
+            distance = (
+                np.linalg.norm(
+                    data[i] - centers,
+                    axis=1
+                )
+                + 1e-8
+            )
+
+            membership[i] = (
+                1 / distance
+            )
+
+            membership[i] /= np.sum(
+                membership[i]
+            )
 
         for k in range(clusters):
-            weights = membership[:, k] ** 2
-            centers[k] = np.sum(
-                weights[:, None] * data,
-                axis=0
-            ) / np.sum(weights)
+
+            weights = (
+                membership[:, k] ** 2
+            )
+
+            centers[k] = (
+                np.sum(
+                    weights[:, None] * data,
+                    axis=0
+                )
+                / np.sum(weights)
+            )
 
     return centers, membership
 
-cluster_data = proto_norm[:, :2]
 
-centers, memberships = cmeans(cluster_data, 3)
+cluster_data = prototype_normalized[:, :2]
 
-input_membership = 1 / (
-    np.linalg.norm(centers - input_norm[:2], axis=1) + 1e-8
+centers, cluster_membership = cmeans(
+    cluster_data,
+    3
 )
 
-input_membership /= np.sum(input_membership)
+input_cluster_membership = 1 / (
+    np.linalg.norm(
+        centers
+        - input_normalized[:2],
+        axis=1
+    ) + 1e-8
+)
 
-cluster_id = np.argmax(input_membership) + 1
+input_cluster_membership /= np.sum(
+    input_cluster_membership
+)
 
-# ---------------------------------------------------------
-# Genetic-style feature selection
-# ---------------------------------------------------------
+cluster_result = (
+    np.argmax(
+        input_cluster_membership
+    ) + 1
+)
+
+cluster_table = pd.DataFrame({
+    "Cluster": [1, 2, 3],
+    "Membership": np.round(
+        input_cluster_membership,
+        4
+    )
+})
+
+st.dataframe(
+    cluster_table,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.success(
+    f"Input belongs most strongly to Cluster {cluster_result}"
+)
+
+st.subheader("🧬 Genetic Feature Selection")
+
+
 def feature_fitness(mask):
-    selected = np.where(mask == 1)[0]
+
+    selected = np.where(
+        mask == 1
+    )[0]
 
     if len(selected) == 0:
         return 0
 
-    variance = np.var(proto_norm[:, selected])
-    compactness = len(selected) / len(mask)
+    variance = np.var(
+        prototype_normalized[:, selected]
+    )
 
-    return variance - 0.05 * compactness
+    penalty = (
+        0.05
+        * len(selected)
+        / len(mask)
+    )
+
+    return variance - penalty
+
 
 population = np.random.randint(
-    0, 2, size=(30, len(feature_names))
+    0,
+    2,
+    size=(30, len(feature_names))
 )
 
 fitness = np.array([
@@ -301,7 +551,9 @@ fitness = np.array([
     for individual in population
 ])
 
-best_gene = population[np.argmax(fitness)]
+best_gene = population[
+    np.argmax(fitness)
+]
 
 selected_features = [
     feature_names[i]
@@ -309,117 +561,64 @@ selected_features = [
     if best_gene[i] == 1
 ]
 
-# ---------------------------------------------------------
-# Results
-# ---------------------------------------------------------
-st.subheader("🧩 Pattern Recognition Results")
-
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    st.metric(
-        "Distance Classifier",
-        distance_class
-    )
-
-with c2:
-    st.metric(
-        "Fuzzy Classifier",
-        fuzzy_class
-    )
-
-with c3:
-    st.metric(
-        "Structural Recognition",
-        structural_class
-    )
-
-st.subheader("🌐 Unsupervised C-Means Analysis")
-
-st.write(
-    f"Input pattern belongs most strongly to **Cluster {cluster_id}**."
-)
-
-cluster_df = pd.DataFrame({
-    "Cluster": [1, 2, 3],
-    "Membership": np.round(input_membership, 4)
-})
-
-st.dataframe(
-    cluster_df,
-    use_container_width=True,
-    hide_index=True
-)
-
-# ---------------------------------------------------------
-# Fuzzy membership visualization
-# ---------------------------------------------------------
-st.subheader("🌫️ Fuzzy Membership")
-
-fuzzy_df = pd.DataFrame({
-    "Pattern": prototype_names,
-    "Membership": fuzzy_membership
-})
-
-st.bar_chart(
-    fuzzy_df.set_index("Pattern")
-)
-
-# ---------------------------------------------------------
-# Genetic feature selection
-# ---------------------------------------------------------
-st.subheader("🧬 Genetic Feature Selection")
-
 if selected_features:
+
     st.write(
-        "Selected feature subset:",
+        "Selected features:",
         ", ".join(selected_features)
     )
-else:
-    st.write("No feature selected.")
 
-# ---------------------------------------------------------
-# Decision explanation
-# ---------------------------------------------------------
-st.subheader("🧠 Recognition Pipeline")
+else:
+
+    st.write(
+        "No feature selected."
+    )
+
+st.subheader("🧠 Complete Recognition Pipeline")
 
 pipeline = [
-    "1. Pattern generation",
-    "2. Coordinate acquisition",
-    "3. Feature extraction",
-    "4. Feature normalization",
-    "5. Minimum-distance classification",
-    "6. Fuzzy membership classification",
-    "7. Structural recognition",
-    "8. C-Means unsupervised clustering",
-    "9. Genetic feature selection"
+    "Pattern generation",
+    "Feature extraction",
+    "Feature normalization",
+    "Minimum-distance classification",
+    "Fuzzy classification",
+    "Structural recognition",
+    "C-means clustering",
+    "Genetic feature selection"
 ]
 
-for step in pipeline:
-    st.write(step)
+for number, step in enumerate(
+    pipeline,
+    start=1
+):
+    st.write(
+        f"**{number}.** {step}"
+    )
 
-# ---------------------------------------------------------
-# Distance table
-# ---------------------------------------------------------
-st.subheader("📏 Pattern Distance Analysis")
+st.subheader("🏁 Final Analysis")
 
-distance_df = pd.DataFrame({
-    "Pattern": prototype_names,
-    "Distance": np.round(distances, 5),
-    "Similarity": np.round(similarity, 5)
+result_table = pd.DataFrame({
+    "Method": [
+        "Minimum Distance",
+        "Fuzzy Classification",
+        "Structural Recognition",
+        "C-Means"
+    ],
+    "Result": [
+        distance_class,
+        fuzzy_class,
+        structural_result,
+        f"Cluster {cluster_result}"
+    ]
 })
 
 st.dataframe(
-    distance_df.sort_values("Distance"),
+    result_table,
     use_container_width=True,
     hide_index=True
-)
-
-st.success(
-    f"Final detected pattern: {distance_class}"
 )
 
 st.caption(
-    "PR-Live demonstrates Pattern Recognition concepts without "
-    "external datasets, pretrained models, or machine-learning libraries."
+    "PR-Live implements Pattern Recognition algorithms "
+    "directly without external datasets or pretrained models."
 )
